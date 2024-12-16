@@ -21,9 +21,9 @@ class VideoSegmentExtractorTest {
     @Test
     void shouldExtractSingleSegment() {
         List<FlightRecord> records = List.of(
-            new FlightRecord(0L, baseTime, 37.5, 127.1, 45.0, true),
-            new FlightRecord(1000L, baseTime.plusSeconds(1), 37.6, 127.2, 46.0, true),
-            new FlightRecord(2000L, baseTime.plusSeconds(2), 37.7, 127.3, 47.0, true)
+            new FlightRecord(0L, baseTime, 37.5, 127.1, 45.0, 0, true),
+            new FlightRecord(1000L, baseTime.plusSeconds(1), 37.6, 127.2, 46.0, 0,true),
+            new FlightRecord(2000L, baseTime.plusSeconds(2), 37.7, 127.3, 47.0, 0, true)
         );
 
         List<VideoSegment> segments = extractor.extractSegments(records);
@@ -35,11 +35,11 @@ class VideoSegmentExtractorTest {
     @Test
     void shouldExtractMultipleSegments() {
         List<FlightRecord> records = List.of(
-            new FlightRecord(0L, baseTime, 37.5, 127.1, 45.0, true),
-            new FlightRecord(1000L, baseTime.plusSeconds(1), 37.6, 127.2, 46.0, true),
-            new FlightRecord(2000L, baseTime.plusSeconds(2), 37.7, 127.3, 47.0, false),
-            new FlightRecord(3000L, baseTime.plusSeconds(3), 37.8, 127.4, 48.0, true),
-            new FlightRecord(4000L, baseTime.plusSeconds(4), 37.9, 127.5, 49.0, true)
+            new FlightRecord(0L, baseTime, 37.5, 127.1, 45.0, 0,true),
+            new FlightRecord(1000L, baseTime.plusSeconds(1), 37.6, 127.2, 46.0, 0,true),
+            new FlightRecord(2000L, baseTime.plusSeconds(2), 37.7, 127.3, 47.0, 90,false),
+            new FlightRecord(3000L, baseTime.plusSeconds(3), 37.8, 127.4, 48.0, 90,true),
+            new FlightRecord(4000L, baseTime.plusSeconds(4), 37.9, 127.5, 49.0, 90,true)
         );
 
         List<VideoSegment> segments = extractor.extractSegments(records);

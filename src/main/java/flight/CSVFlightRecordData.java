@@ -22,6 +22,9 @@ public class CSVFlightRecordData {
     @CsvBindByName(column = "longitude")
     private Double longitude;
 
+    @CsvBindByName(column = "altitude(feet)")
+    private Double altitudeFeet;
+
     @CsvBindByName(column = "compass_heading(degrees)")
     private Double compassHeading;
 
@@ -38,6 +41,7 @@ public class CSVFlightRecordData {
                     dateTime,
                     latitude,
                     longitude,
+                    altitudeFeet,
                     compassHeading,
                     isVideo == 1
             );
@@ -59,6 +63,9 @@ public class CSVFlightRecordData {
         if (longitude == null) {
             throw new IllegalArgumentException("Field 'longitude' is missing or invalid.");
         }
+        if (altitudeFeet == null) {
+            throw new IllegalArgumentException("Field 'altitude(feet)' is missing or invalid.");
+        }
         if (compassHeading == null) {
             throw new IllegalArgumentException("Field 'compass_heading(degrees)' is missing or invalid.");
         }
@@ -79,6 +86,9 @@ public class CSVFlightRecordData {
 
     public Double getLongitude() { return longitude; }
     public void setLongitude(Double value) { this.longitude = value; }
+
+    public Double getAltitudeFeet() { return altitudeFeet; }
+    public void setAltitudeFeet(Double value) { this.altitudeFeet = value; }
 
     public Double getCompassHeading() { return compassHeading; }
     public void setCompassHeading(Double value) { this.compassHeading = value; }

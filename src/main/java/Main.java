@@ -1,6 +1,7 @@
 import calculator.IntersectionCalculator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import domain.TrajectoryIntersection;
 import processor.DroneVideoProcessor;
 import processor.FlightRecordInterpolator;
@@ -35,19 +36,16 @@ public class Main {
 
             // 2. Processor 초기화
             DroneVideoProcessor processor = DroneVideoProcessor.builder()
-                .flightRecordReader(new CsvFlightRecordReader())
-                .trackingReader(new JsonTrackingReader())
-                .segmentProcessor(new VideoSegmentProcessor())
-                .interpolator(new FlightRecordInterpolator())
-                .intersectionCalculator(new IntersectionCalculator())
-                .fovDegrees(59.0)
-                .build();
+                    .flightRecordReader(new CsvFlightRecordReader())
+                    .trackingReader(new JsonTrackingReader())
+                    .segmentProcessor(new VideoSegmentProcessor())
+                    .interpolator(new FlightRecordInterpolator())
+                    .intersectionCalculator(new IntersectionCalculator())
+                    .fovDegrees(59.0)
+                    .build();
 
             // 3. 비디오 처리 실행
-            DroneVideoProcessor.ProcessingResult result = processor.processVideo(
-                flightLogPath,
-                trackingJsonPaths
-            );
+            var result = processor.processVideo(flightLogPath, trackingJsonPaths);
 
             // 4. 결과 출력 및 저장
             printResults(result);
@@ -60,73 +58,66 @@ public class Main {
         }
     }
 
-    private static void saveResults(DroneVideoProcessor.ProcessingResult result) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);  // Pretty print
-
-        // 결과 저장할 디렉토리 생성
-        Files.createDirectories(Paths.get(OUTPUT));
-
-        // 각 세그먼트별 결과 저장
-        for (int i = 0; i < result.getSegments().size(); i++) {
-            DroneVideoProcessor.ProcessedSegment segment = result.getSegments().get(i);
-            String segmentOutputPath = OUTPUT + "processed_segment_" + (i + 1) + ".json";
-
-            objectMapper.writeValue(new File(segmentOutputPath), segment);
-            System.out.println("Saved segment result to: " + segmentOutputPath);
-        }
-
-        // 교차점 결과 저장
-        if (!result.getIntersections().isEmpty()) {
-            String intersectionsPath = OUTPUT + "intersections.json";
-            objectMapper.writeValue(new File(intersectionsPath), result.getIntersections());
-            System.out.println("Saved intersections to: " + intersectionsPath);
-        }
-
-        // 전체 결과 저장
-        String fullResultPath = OUTPUT + "full_result.json";
-        objectMapper.writeValue(new File(fullResultPath), result);
-        System.out.println("Saved full result to: " + fullResultPath);
-    }
-
-    private static void printResults(DroneVideoProcessor.ProcessingResult result) {
+    private static void printResults(List<DroneVideoProcessor.ProcessedSegment> segments) {
         System.out.println("\n=== Processing Results ===");
 
         // 세그먼트별 결과 출력
-        List<DroneVideoProcessor.ProcessedSegment> segments = result.getSegments();
         System.out.println("\nProcessed Segments: " + segments.size());
 
         for (int i = 0; i < segments.size(); i++) {
             DroneVideoProcessor.ProcessedSegment processedSegment = segments.get(i);
             System.out.printf("\nSegment %d:%n", i + 1);
             System.out.printf("  - Time Range: %.1f ~ %.1f seconds%n",
-                processedSegment.getSegment().getStartElapseTime(),
-                processedSegment.getSegment().getEndElapseTime());
+                    processedSegment.getSegment().getStartElapseTime(),
+                    processedSegment.getSegment().getEndElapseTime());
             System.out.printf("  - Video: %s (%dx%d)%n",
-                processedSegment.getMetadata().getName(),
-                processedSegment.getMetadata().getWidth(),
-                processedSegment.getMetadata().getHeight());
+                    processedSegment.getMetadata().getName(),
+                    processedSegment.getMetadata().getWidth(),
+                    processedSegment.getMetadata().getHeight());
             System.out.printf("  - Tracked Objects: %d%n",
-                processedSegment.getGeoreferencedObjects().size());
-        }
+                    processedSegment.getGeoreferencedObjects().size());
+            System.out.printf("  - Intersections: %d%n",
+                    processedSegment.getIntersections().size());
 
-        // 궤적 교차점 출력
-        List<TrajectoryIntersection> intersections = result.getIntersections();
-        System.out.println("\nTrajectory Intersections: " + intersections.size());
-
-        for (int i = 0; i < intersections.size(); i++) {
-            TrajectoryIntersection intersection = intersections.get(i);
-            System.out.printf("\nIntersection %d:%n", i + 1);
-            System.out.printf("  - Time: %.1f seconds%n", intersection.getTimestamp());
-            System.out.printf("  - Location: (%.6f, %.6f, %.1f)%n",
-                intersection.getIntersectionPoint().getLatitude(),
-                intersection.getIntersectionPoint().getLongitude(),
-                intersection.getIntersectionPoint().getAltitude());
-            System.out.printf("  - Objects: %s intersects with %s%n",
-                intersection.getObject1().getTrackedObject().getTrackingId(),
-                intersection.getObject2().getTrackedObject().getTrackingId());
+            // 해당 세그먼트의 교차점 출력
+            List<TrajectoryIntersection> intersections = processedSegment.getIntersections();
+            if (!intersections.isEmpty()) {
+                System.out.println("  - Intersection Details:");
+                for (int j = 0; j < intersections.size(); j++) {
+                    TrajectoryIntersection intersection = intersections.get(j);
+                    System.out.printf("    %d) Time: %.1f seconds, Objects: %s intersects with %s%n",
+                            j + 1,
+                            intersection.getTimestamp(),
+                            intersection.getObject1().getTrackedObject().getTrackingId(),
+                            intersection.getObject2().getTrackedObject().getTrackingId());
+                }
+            }
         }
 
         System.out.println("\nSaving results to: " + OUTPUT);
+    }
+
+    private static void saveResults(List<DroneVideoProcessor.ProcessedSegment> segments) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        // 결과 저장할 디렉토리 생성
+        Files.createDirectories(Paths.get(OUTPUT));
+
+        // 각 세그먼트별 결과 저장
+        for (int i = 0; i < segments.size(); i++) {
+            DroneVideoProcessor.ProcessedSegment segment = segments.get(i);
+            String segmentOutputPath = OUTPUT + "processed_segment_" + (i + 1) + ".json";
+
+            objectMapper.writeValue(new File(segmentOutputPath), segment);
+            System.out.println("Saved segment result to: " + segmentOutputPath);
+        }
+
+        // 전체 결과 저장
+        String fullResultPath = OUTPUT + "full_result.json";
+        objectMapper.writeValue(new File(fullResultPath), segments);
+        System.out.println("Saved full result to: " + fullResultPath);
     }
 }

@@ -1,3 +1,4 @@
+// DroneVideoProcessor.java
 package processor;
 
 import calculator.GeoreferencingCalculator;
@@ -13,22 +14,19 @@ import reader.dto.VideoMetadata;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
-
 
 @RequiredArgsConstructor
 @Builder
 public class DroneVideoProcessor {
-
     private final CsvFlightRecordReader flightRecordReader;
     private final JsonTrackingReader trackingReader;
     private final VideoSegmentProcessor segmentProcessor;
     private final FlightRecordInterpolator interpolator;
     private final GeoreferencingCalculator georeferencingCalculator;
     private final IntersectionCalculator intersectionCalculator;
-    private final double fovDegrees;  // 생성자로 FOV 값 주입
+    private final double fovDegrees;
 
-    public ProcessingResult processVideo(String flightLogPath, String[] trackingJsonPaths) {
+    public List<ProcessedSegment> processVideo(String flightLogPath, String[] trackingJsonPaths) {
         System.out.println("=== Start Video Processing ===");
 
         // 1. 비행 로그 읽기
@@ -49,18 +47,13 @@ public class DroneVideoProcessor {
             );
         }
 
-        // 3. 각 세그먼트별 처리
+        // 3. 각 세그먼트별 처리 (교차점 계산 포함)
         System.out.println("Step 3: Processing each segment...");
         List<ProcessedSegment> processedSegments = processSegments(segments, trackingJsonPaths);
         System.out.println("Step 3 Result: Total processed segments = " + processedSegments.size());
 
-        // 4. 전체 궤적 교차점 찾기
-        System.out.println("Step 4: Finding all trajectory intersections...");
-        List<TrajectoryIntersection> intersections = findAllIntersections(processedSegments);
-        System.out.println("Step 4 Result: Total intersections found = " + intersections.size());
-
         System.out.println("=== Video Processing Completed ===");
-        return new ProcessingResult(processedSegments, intersections);
+        return processedSegments;
     }
 
     private List<FlightRecord> readFlightLog(String path) {
@@ -88,36 +81,42 @@ public class DroneVideoProcessor {
 
                 // 2. 프레임 레이트에 맞춰 비행 로그 보간
                 List<FlightRecord> interpolatedRecords = interpolator.interpolateByFps(
-                    segment.getFlightRecords(),
-                    trackingData.getMetadata().getFps()
+                        segment.getFlightRecords(),
+                        trackingData.getMetadata().getFps()
                 );
                 System.out.println("Interpolated " + interpolatedRecords.size() + " flight records for FPS: " + trackingData.getMetadata().getFps());
 
                 // GeoreferencingCalculator 초기화 (비디오 메타데이터 기반)
                 GeoreferencingCalculator calculator = GeoreferencingCalculator.builder()
-                    .videoWidth(trackingData.getMetadata().getWidth())
-                    .videoHeight(trackingData.getMetadata().getHeight())
-                    .fovDegrees(fovDegrees)
-                    .build();
+                        .videoWidth(trackingData.getMetadata().getWidth())
+                        .videoHeight(trackingData.getMetadata().getHeight())
+                        .fovDegrees(fovDegrees)
+                        .build();
 
                 // 3. 각 객체의 지리참조 정보 계산
                 List<GeoreferencedObject> geoObjects = new ArrayList<>();
                 for (TrackedObject obj : trackingData.getTrackedObjects()) {
-                    // 해당 프레임의 보간된 비행 기록 찾기
                     FlightRecord record = interpolatedRecords.get(obj.getFrameNumber());
                     geoObjects.add(calculator.georeference(obj, record));
                 }
                 System.out.println("Georeferenced " + geoObjects.size() + " objects for this segment.");
 
+                // 4. 해당 세그먼트의 교차점 계산
+                System.out.println("Finding intersections for segment " + (i + 1));
+                List<TrajectoryIntersection> segmentIntersections =
+                        intersectionCalculator.findIntersections(geoObjects);
+                System.out.println("Found " + segmentIntersections.size() + " intersections in segment " + (i + 1));
+
                 processedSegments.add(new ProcessedSegment(
-                    segment,
-                    geoObjects,
-                    trackingData.getMetadata()
+                        segment,
+                        geoObjects,
+                        trackingData.getMetadata(),
+                        segmentIntersections
                 ));
 
             } catch (Exception e) {
                 throw new ProcessingException(
-                    String.format("Failed to process segment %d: %s", i, e.getMessage()), e
+                        String.format("Failed to process segment %d: %s", i, e.getMessage()), e
                 );
             }
         }
@@ -125,27 +124,12 @@ public class DroneVideoProcessor {
         return processedSegments;
     }
 
-    private List<TrajectoryIntersection> findAllIntersections(List<ProcessedSegment> segments) {
-        System.out.println("Combining all georeferenced objects for intersection calculation...");
-        List<GeoreferencedObject> allObjects = segments.stream()
-            .flatMap(segment -> segment.getGeoreferencedObjects().stream())
-            .collect(Collectors.toList());
-
-        List<TrajectoryIntersection> intersections = intersectionCalculator.findIntersections(allObjects);
-        System.out.println("Found " + intersections.size() + " intersections.");
-        return intersections;
-    }
-
     @Value
     public static class ProcessedSegment {
         VideoSegment segment;
         List<GeoreferencedObject> georeferencedObjects;
-        VideoMetadata metadata;  // 비디오 메타데이터 추가
-    }
-
-    @Value
-    public static class ProcessingResult {
-        List<ProcessedSegment> segments;
+        VideoMetadata metadata;
         List<TrajectoryIntersection> intersections;
     }
+
 }
